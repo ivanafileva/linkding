@@ -1,11 +1,48 @@
 services:
-  linkding:
-    container_name: "${LD_CONTAINER_NAME:-linkding}"
-    image: sissbruecker/linkding:latest
-    ports:
-      - "${LD_HOST_PORT:-9090}:9090"
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      - "${LD_HOST_DATA_DIR:-./data}:/etc/linkding/data"
-    env_file:
-      - .env
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     restart: unless-stopped
+
+  linkding:
+    build: .
+    environment:
+      LD_DB_ENGINE: postgres
+      LD_DB_HOST: db
+      LD_DB_PORT: 5432
+      LD_DB_DATABASE: ${POSTGRES_DB}
+      LD_DB_USER: ${POSTGRES_USER}
+      LD_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      LD_SUPERUSER_NAME: ${LD_SUPERUSER_NAME}
+      LD_SUPERUSER_PASSWORD: ${LD_SUPERUSER_PASSWORD}
+    volumes:
+      - linkding_data:/etc/linkding/data
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - linkding
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  linkding_data:

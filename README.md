@@ -6,6 +6,47 @@
     <br>
 </div>
 
+## DevOps Assignment
+
+This section documents the custom infrastructure added on top of the linkding project.
+
+### Services
+
+| Service | Image | Role |
+|---------|-------|------|
+| `db` | `postgres:16-alpine` | Persistent PostgreSQL database with health check |
+| `linkding` | Built from local `Dockerfile` | Django app served by gunicorn on port 9090 |
+| `nginx` | `nginx:alpine` | Reverse proxy, routes port 80 → linkding:9090 |
+
+### Running with Docker Compose
+
+```bash
+cp .env.example .env          # fill in POSTGRES_PASSWORD and LD_SUPERUSER_PASSWORD
+docker compose up --build -d  # build and start all 3 services
+docker compose logs -f        # follow logs
+docker compose down -v        # stop and remove volumes
+```
+
+The app is available at `http://localhost` once all services are healthy.
+
+### CI Pipeline (`.github/workflows/ci.yml`)
+
+Triggers on every push to `main`:
+1. Runs `pytest bookmarks/tests/ -x -q` to validate the codebase
+2. Logs in to DockerHub using repository secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`
+3. Builds the custom `Dockerfile` and pushes two tags: `latest` and the commit SHA
+
+### Kubernetes
+
+```bash
+kubectl apply -f k8s/ -n linkding
+```
+
+Manifests in `k8s/`: namespace → postgres Secret + StatefulSet + headless Service → linkding ConfigMap + Secret + Deployment + ClusterIP Service + Ingress.
+Before applying, replace base64 placeholder values in `k8s/postgres-secret.yaml` and `k8s/linkding-configmap-secret.yaml`, and set your DockerHub username in `k8s/linkding-deployment.yaml`.
+
+---
+
 ##  Introduction
 
 linkding is a bookmark manager that you can host yourself.
