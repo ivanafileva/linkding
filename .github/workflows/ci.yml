@@ -3,7 +3,9 @@ name: CI
 on:
   push:
     branches:
+      - master
       - main
+  workflow_dispatch:
 
 jobs:
   test-and-push:
@@ -22,10 +24,11 @@ jobs:
         uses: astral-sh/setup-uv@v3
 
       - name: Install Python dependencies
-        run: uv sync --no-dev --group postgres --frozen
+        # Include the dev group so pytest and friends are available for the test step
+        run: uv sync --frozen
 
       - name: Run unit tests
-        run: python -m pytest bookmarks/tests/ -x -q
+        run: uv run pytest bookmarks/tests/ -x -q
         env:
           DJANGO_SETTINGS_MODULE: bookmarks.settings.dev
 
@@ -38,13 +41,26 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and push Docker image
+      - name: Build and push backend image
         uses: docker/build-push-action@v5
         with:
           context: .
+          file: docker/backend.Dockerfile
           push: true
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/linkding:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/linkding:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/frontend.Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/linkding-frontend:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/linkding-frontend:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

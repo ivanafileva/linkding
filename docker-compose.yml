@@ -1,6 +1,9 @@
 services:
+  # PostgreSQL database (dedicated image)
   db:
-    image: postgres:16-alpine
+    build:
+      context: .
+      dockerfile: docker/db.Dockerfile
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -15,8 +18,13 @@ services:
       start_period: 15s
     restart: unless-stopped
 
-  linkding:
-    build: .
+  # Django application served by uWSGI + Huey background worker.
+  # Builds the full app + static bundle and publishes the static build into the
+  # shared static_build volume for the frontend to serve.
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
     environment:
       LD_DB_ENGINE: postgres
       LD_DB_HOST: db
@@ -28,21 +36,29 @@ services:
       LD_SUPERUSER_PASSWORD: ${LD_SUPERUSER_PASSWORD}
     volumes:
       - linkding_data:/etc/linkding/data
+      - static_build:/etc/linkding/static
     depends_on:
       db:
         condition: service_healthy
     restart: unless-stopped
 
-  nginx:
-    image: nginx:alpine
+  # nginx web tier: serves the mounted static build and proxies to the backend.
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
     ports:
       - "80:80"
     volumes:
+      # The full static build, populated by the backend, served read-only here.
+      - static_build:/var/www/static:ro
+      # Bind-mount the config so tweaks don't require an image rebuild.
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
-      - linkding
+      - backend
     restart: unless-stopped
 
 volumes:
   postgres_data:
   linkding_data:
+  static_build:

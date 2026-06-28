@@ -1,0 +1,76 @@
+---
+# Persistent storage for linkding data (favicons, previews, assets, secret key)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: linkding-data
+  namespace: linkding
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: linkding
+  namespace: linkding
+spec:
+  replicas: 1
+  # Data is a ReadWriteOnce PVC, so avoid two pods mounting it at once.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: linkding
+  template:
+    metadata:
+      labels:
+        app: linkding
+    spec:
+      containers:
+        - name: linkding
+          image: ivanafileva236035/linkding:latest
+          ports:
+            - containerPort: 9090
+          envFrom:
+            - configMapRef:
+                name: linkding-config
+            - secretRef:
+                name: linkding-secret
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          # Give the app time to run migrations / collectstatic on first boot
+          # before the liveness/readiness probes start enforcing health.
+          startupProbe:
+            httpGet:
+              path: /health
+              port: 9090
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 9090
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 9090
+            periodSeconds: 15
+            failureThreshold: 3
+          volumeMounts:
+            - name: linkding-data
+              mountPath: /etc/linkding/data
+      volumes:
+        - name: linkding-data
+          persistentVolumeClaim:
+            claimName: linkding-data

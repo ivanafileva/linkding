@@ -5,6 +5,11 @@
 !/bookmarks
 
 !/bootstrap.sh
+# Re-include the docker/ dir so the backend entrypoint is in the build context.
+# (A file in an excluded directory cannot be re-included on its own.)
+!/docker
+# Re-include the nginx config for the frontend image build
+!/nginx
 !/LICENSE.txt
 !/manage.py
 !/package.json

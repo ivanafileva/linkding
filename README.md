@@ -12,11 +12,18 @@ This section documents the custom infrastructure added on top of the linkding pr
 
 ### Services
 
-| Service | Image | Role |
-|---------|-------|------|
-| `db` | `postgres:16-alpine` | Persistent PostgreSQL database with health check |
-| `linkding` | Built from local `Dockerfile` | Django app served by gunicorn on port 9090 |
-| `nginx` | `nginx:alpine` | Reverse proxy, routes port 80 → linkding:9090 |
+Each tier has its own dedicated Dockerfile under `docker/`, wired together in `docker-compose.yml`:
+
+| Service | Dockerfile | Role |
+|---------|------------|------|
+| `db` | `docker/db.Dockerfile` | PostgreSQL 16 (dedicated image) with health check |
+| `backend` | `docker/backend.Dockerfile` | Builds the frontend assets + Python deps, runs `collectstatic`, and serves the app via uWSGI plus the Huey background worker on port 9090. Publishes the full static build into a shared volume. |
+| `frontend` | `docker/frontend.Dockerfile` | nginx web tier — serves the mounted static build directly and reverse-proxies the app to `backend:9090` on port 80 |
+
+The "full build" is shared between containers via named volumes:
+- `static_build` — the collected static bundle (JS/CSS + admin/DRF assets), produced by `backend`, served by `frontend`.
+- `linkding_data` — favicons, previews, assets and the generated secret key.
+- `postgres_data` — database files.
 
 ### Running with Docker Compose
 
@@ -34,7 +41,7 @@ The app is available at `http://localhost` once all services are healthy.
 Triggers on every push to `main`:
 1. Runs `pytest bookmarks/tests/ -x -q` to validate the codebase
 2. Logs in to DockerHub using repository secrets `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN`
-3. Builds the custom `Dockerfile` and pushes two tags: `latest` and the commit SHA
+3. Builds `docker/backend.Dockerfile` (→ `linkding`) and `docker/frontend.Dockerfile` (→ `linkding-frontend`) and pushes `latest` + commit-SHA tags for each.
 
 ### Kubernetes
 
@@ -42,8 +49,9 @@ Triggers on every push to `main`:
 kubectl apply -f k8s/ -n linkding
 ```
 
-Manifests in `k8s/`: namespace → postgres Secret + StatefulSet + headless Service → linkding ConfigMap + Secret + Deployment + ClusterIP Service + Ingress.
-Before applying, replace base64 placeholder values in `k8s/postgres-secret.yaml` and `k8s/linkding-configmap-secret.yaml`, and set your DockerHub username in `k8s/linkding-deployment.yaml`.
+Manifests in `k8s/` are numerically prefixed so a single `kubectl apply -f k8s/` applies them in dependency order: `00-namespace` → `10/11` postgres (Secret + StatefulSet + headless Service) → `20-23` linkding (ConfigMap + Secret + PVC + Deployment + ClusterIP Service + Ingress). The nginx Ingress controller is the web front; the backend (uWSGI) serves `/static` itself, so Ingress routes straight to the backend Service. App data is stored on a `PersistentVolumeClaim`.
+
+Before applying, replace base64 placeholder values in `k8s/10-postgres-config-secret.yaml` and `k8s/20-linkding-configmap-secret.yaml`, and set your DockerHub image in `k8s/21-linkding-deployment.yaml`.
 
 ---
 
