@@ -181,6 +181,9 @@ typings/
 # next.js build output
 .next
 
+### Claude Code
+CLAUDE.md
+
 ### Custom
 # Rollup compilation output
 /bookmarks/static/bundle.js*
