@@ -25,7 +25,7 @@ jobs:
 
       - name: Install Python dependencies
         # Include the dev group so pytest and friends are available for the test step
-        run: uv sync --frozen
+        run: uv sync --frozen && mkdir -p data
 
       - name: Run unit tests
         run: uv run pytest bookmarks/tests/ -x -q
