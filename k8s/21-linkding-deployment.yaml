@@ -34,6 +34,7 @@ spec:
       containers:
         - name: linkding
           image: ivanafileva236035/linkding:latest
+          imagePullPolicy: Always
           ports:
             - containerPort: 9090
           envFrom:
